@@ -1,97 +1,94 @@
-This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
+# GitHub Issues Browser
 
-# Getting Started
+A React Native application for browsing issues from the React Native repository using GitHub's GraphQL API.
 
-> **Note**: Make sure you have completed the [Set Up Your Environment](https://reactnative.dev/docs/set-up-your-environment) guide before proceeding.
+## Features
 
-## Step 1: Start Metro
+- Search for issues by text in title and body
+- Filter issues by status (OPEN/CLOSED/ALL)
+- View issue details and comments
+- Pagination for both issues list and comments
+- Error handling and offline detection
+- TypeScript for type safety
+- Redux for state management
+- Apollo Client for GraphQL integration
+- Tailwind CSS for styling
 
-First, you will need to run **Metro**, the JavaScript build tool for React Native.
+## Project Structure
 
-To start the Metro dev server, run the following command from the root of your React Native project:
-
-```sh
-# Using npm
-npm start
-
-# OR using Yarn
-yarn start
+```
+src/
+├── apollo/           # Apollo Client setup and GraphQL queries
+├── components/       # Reusable UI components
+├── redux/            # Redux store, slices, and thunks
+│   ├── slices/       # Redux slices for state management
+│   ├── hooks.ts      # Custom Redux hooks
+│   ├── store.ts      # Redux store configuration
+│   └── thunks.ts     # Async thunks for API calls
+├── screens/          # Screen components
+├── types/            # TypeScript interfaces
+└── utils/            # Utility functions and hooks
 ```
 
-## Step 2: Build and run your app
+## Setup Instructions
 
-With Metro running, open a new terminal window/pane from the root of your React Native project, and use one of the following commands to build and run your Android or iOS app:
+1. Clone the repository
+2. Install dependencies:
+   ```
+   npm install
+   ```
+3. Add your GitHub personal access token:
+   - Open `src/apollo/apolloClient.tsx`
+   - Replace `YOUR_GITHUB_TOKEN` with your GitHub personal access token
 
-### Android
+4. Run the application:
+   ```
+   npx react-native run-android
+   # or
+   npx react-native run-ios
+   ```
 
-```sh
-# Using npm
-npm run android
+## Implementation Details
 
-# OR using Yarn
-yarn android
-```
+### State Management
 
-### iOS
+The application uses Redux with Redux Toolkit for state management. The main slices are:
 
-For iOS, remember to install CocoaPods dependencies (this only needs to be run on first clone or after updating native deps).
+- `issuesSlice`: Manages issues data, search parameters, and pagination
+- `uiSlice`: Manages UI state like loading and errors
+- `networkSlice`: Manages network connectivity status
 
-The first time you create a new project, run the Ruby bundler to install CocoaPods itself:
+### API Integration
 
-```sh
-bundle install
-```
+GitHub's GraphQL API is integrated using Apollo Client. The main queries are:
 
-Then, and every time you update your native dependencies, run:
+- `SEARCH_ISSUES`: Search for issues with pagination
+- `GET_ISSUE`: Get a single issue by number
+- `GET_ISSUE_COMMENTS`: Get comments for an issue with pagination
 
-```sh
-bundle exec pod install
-```
+### Navigation
 
-For more information, please visit [CocoaPods Getting Started guide](https://guides.cocoapods.org/using/getting-started.html).
+The application uses a simple state-based navigation system:
 
-```sh
-# Using npm
-npm run ios
+- `IssuesScreen`: Displays the search form and issues list
+- `IssueDetailScreen`: Displays the details of a selected issue and its comments
 
-# OR using Yarn
-yarn ios
-```
+### Error Handling
 
-If everything is set up correctly, you should see your new app running in the Android Emulator, iOS Simulator, or your connected device.
+The application includes comprehensive error handling:
 
-This is one way to run your app — you can also build it directly from Android Studio or Xcode.
+- `ErrorBoundary`: Catches and displays React component errors
+- `NetworkStatus`: Detects and handles network connectivity issues
+- Redux error states: Manages API errors and displays appropriate messages
 
-## Step 3: Modify your app
+### Styling
 
-Now that you have successfully run the app, let's make changes!
+The application uses react-native-tailwindcss for styling, with a custom theme that matches GitHub's colors.
 
-Open `App.tsx` in your text editor of choice and make some changes. When you save, your app will automatically update and reflect these changes — this is powered by [Fast Refresh](https://reactnative.dev/docs/fast-refresh).
+## Future Improvements
 
-When you want to forcefully reload, for example to reset the state of your app, you can perform a full reload:
-
-- **Android**: Press the <kbd>R</kbd> key twice or select **"Reload"** from the **Dev Menu**, accessed via <kbd>Ctrl</kbd> + <kbd>M</kbd> (Windows/Linux) or <kbd>Cmd ⌘</kbd> + <kbd>M</kbd> (macOS).
-- **iOS**: Press <kbd>R</kbd> in iOS Simulator.
-
-## Congratulations! :tada:
-
-You've successfully run and modified your React Native App. :partying_face:
-
-### Now what?
-
-- If you want to add this new React Native code to an existing application, check out the [Integration guide](https://reactnative.dev/docs/integration-with-existing-apps).
-- If you're curious to learn more about React Native, check out the [docs](https://reactnative.dev/docs/getting-started).
-
-# Troubleshooting
-
-If you're having issues getting the above steps to work, see the [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.
-
-# Learn More
-
-To learn more about React Native, take a look at the following resources:
-
-- [React Native Website](https://reactnative.dev) - learn more about React Native.
-- [Getting Started](https://reactnative.dev/docs/environment-setup) - an **overview** of React Native and how setup your environment.
-- [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
-- [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
-- [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
+- Add unit tests for components and Redux logic
+- Implement E2E testing with a framework like Detox
+- Add authentication flow for user-specific actions
+- Improve offline support with local caching
+- Add dark mode support
