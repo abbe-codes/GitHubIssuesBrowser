@@ -12,7 +12,7 @@ const authLink = setContext((_, { headers }) => {
   // Note: In a real app, you would store this token securely
   // For this challenge, we'll use a constant token
   // You would need to replace this with a valid GitHub token
-  const token = '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';
+  const token = 'GITHUB_PERSONAL_ACCESS_TOKEN';
   
   return {
     headers: {

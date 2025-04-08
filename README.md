@@ -39,7 +39,7 @@ src/
    ```
 3. Add your GitHub personal access token:
    - Open `src/apollo/apolloClient.tsx`
-   - Replace `YOUR_GITHUB_TOKEN` with your GitHub personal access token
+   - Replace `GITHUB_PERSONAL_ACCESS_TOKEN` with your GitHub personal access token
 
 4. Run the application:
    ```
