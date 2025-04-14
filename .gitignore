@@ -41,8 +41,10 @@ node_modules/
 npm-debug.log
 yarn-error.log
 
-# environment variables
+# Environment variables
 .env
+.env.local
+.env.*
 
 # fastlane
 #
