@@ -1,165 +1,269 @@
-import React from 'react';
-import { View, Text, ScrollView, ActivityIndicator } from 'react-native';
-import { useAppDispatch, useAppSelector } from '../redux/hooks';
-import { getIssueByNumber, getIssueComments } from '../redux/thunks';
-import { setSelectedIssue } from '../redux/slices/issuesSlice';
-import T from '../utils/tailwind';
-import Button from '../components/Button';
-import { GitHubApiError, useGitHubApiError, formatDate } from '../utils/githubApi';
-import ListItem from '../components/ListItem';
+// src/screens/IssueDetailScreen.tsx
+import React, { useEffect } from 'react';
+import {
+  View,
+  Text,
+  ScrollView,
+  FlatList,
+  ActivityIndicator,
+} from 'react-native';
+import { RouteProp } from '@react-navigation/native';
+import { StackNavigationProp } from '@react-navigation/stack';
+import { RootStackParamList } from '../navigation';
+import { useQuery } from '@apollo/client';
+import { useDispatch, useSelector } from 'react-redux';
+import { GET_ISSUE } from '../api/queries';
+import {
+  setSelectedIssue,
+  setSelectedIssueLoading,
+  setSelectedIssueError,
+  addComments,
+  clearSelectedIssue,
+} from '../store/issuesSlice';
+import { RootState } from '../store';
+import { Comment } from '../types';
+import CommentItem from '../components/CommentItem';
+import LoadingView from '../components/LoadingView';
+import ErrorView from '../components/ErrorView';
+import tw from 'twrnc';
 
-interface IssueDetailScreenProps {
-  issueNumber: number;
-  onBack: () => void;
-}
+// Props type definition
+type IssueDetailScreenProps = {
+  route: RouteProp<RootStackParamList, 'IssueDetail'>;
+  navigation: StackNavigationProp<RootStackParamList, 'IssueDetail'>;
+};
 
-const IssueDetailScreen: React.FC<IssueDetailScreenProps> = ({ 
-  issueNumber,
-  onBack
-}) => {
-  const dispatch = useAppDispatch();
-  const { selectedIssue, loading, comments } = useAppSelector(state => state.issues);
-  const { hasError, errorMessage } = useGitHubApiError();
+// IssueDetailScreen component for displaying a single issue and its comments
+// This screen shows the details of an issue and allows viewing comments
+const IssueDetailScreen = ({ route, navigation }: IssueDetailScreenProps) => {
+  const { issueNumber } = route.params;
+  const dispatch = useDispatch();
+  const { selectedIssue } = useSelector((state: RootState) => state.issues);
+  const { issue, comments, commentsPageInfo, loading, error } = selectedIssue;
 
-  // Fetch issue details when component mounts
-  React.useEffect(() => {
-    dispatch(getIssueByNumber(issueNumber));
-    
-    // Fetch initial comments
-    dispatch(getIssueComments({
-      issueNumber,
-      first: 10
-    }));
-    
-    // Cleanup when unmounting
+  // Local state for pagination loading
+  const [loadingMoreComments, setLoadingMoreComments] = React.useState(false);
+
+  // Execute the GraphQL query to get issue details
+  const {
+    loading: queryLoading,
+    error: queryError,
+    data,
+    fetchMore,
+  } = useQuery(GET_ISSUE, {
+    variables: {
+      owner: 'facebook',
+      name: 'react-native',
+      number: issueNumber,
+      first: 10,
+      after: null,
+    },
+    notifyOnNetworkStatusChange: true,
+  });
+
+  // Update Redux state when query data changes
+  useEffect(() => {
+    if (queryLoading && !loadingMoreComments) {
+      dispatch(setSelectedIssueLoading(true));
+    } else if (!queryLoading) {
+      dispatch(setSelectedIssueLoading(false));
+      setLoadingMoreComments(false);
+
+      if (queryError) {
+        dispatch(setSelectedIssueError(queryError.message));
+      } else if (data && data.repository && data.repository.issue) {
+        const issueData = data.repository.issue;
+
+        // Set the issue title in the navigation header
+        navigation.setOptions({
+          title: `#${issueNumber}: ${issueData.title.substring(0, 20)}${
+            issueData.title.length > 20 ? '...' : ''
+          }`,
+        });
+
+        // Map the comments from the GraphQL response
+        const commentsData = issueData.comments.nodes.map(
+          (node: any) => node as Comment
+        );
+
+        // Update the Redux state with the issue and comments
+        dispatch(
+          setSelectedIssue({
+            issue: {
+              id: issueData.id,
+              number: issueData.number,
+              title: issueData.title,
+              bodyText: issueData.bodyText,
+              state: issueData.state,
+              createdAt: issueData.createdAt,
+              author: issueData.author,
+              comments: {
+                totalCount: issueData.comments.totalCount,
+              },
+            },
+            comments: commentsData,
+            pageInfo: issueData.comments.pageInfo,
+          })
+        );
+      }
+    }
+  }, [
+    queryLoading,
+    queryError,
+    data,
+    dispatch,
+    navigation,
+    issueNumber,
+    loadingMoreComments,
+  ]);
+
+  // Clean up when component unmounts
+  useEffect(() => {
     return () => {
-      dispatch(setSelectedIssue(null));
+      dispatch(clearSelectedIssue());
     };
-  }, [issueNumber, dispatch]);
+  }, [dispatch]);
 
-  // Handle loading more comments
+  // Handle loading more comments (pagination)
   const handleLoadMoreComments = () => {
-    if (comments.pageInfo.hasNextPage) {
-      dispatch(getIssueComments({
-        issueNumber,
-        first: 10,
-        after: comments.pageInfo.endCursor
-      }));
+    if (commentsPageInfo?.hasNextPage && !loadingMoreComments) {
+      setLoadingMoreComments(true);
+
+      fetchMore({
+        variables: {
+          after: commentsPageInfo.endCursor,
+        },
+      })
+        .then((result) => {
+          // Map the new comments
+          const newComments = result.data.repository.issue.comments.nodes.map(
+            (node: any) => node as Comment
+          );
+
+          // Add the new comments to the existing list
+          dispatch(
+            addComments({
+              comments: newComments,
+              pageInfo: result.data.repository.issue.comments.pageInfo,
+            })
+          );
+
+          setLoadingMoreComments(false);
+        })
+        .catch((error) => {
+          setLoadingMoreComments(false);
+          dispatch(setSelectedIssueError(error.message));
+        });
     }
   };
 
-  if (loading && !selectedIssue) {
+  // Format date to be more readable
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+  };
+
+  // Render loading state
+  if (loading && !loadingMoreComments) {
+    return <LoadingView message='Loading issue details...' />;
+  }
+
+  // Render error state
+  if (error && !loading) {
     return (
-      <View style={[T.flex1, T.itemsCenter, T.justifyCenter]}>
-        <ActivityIndicator size="large" color="#0366d6" />
-      </View>
+      <ErrorView
+        message={`Error loading issue: ${error}`}
+        onRetry={() => {
+          dispatch(setSelectedIssueError(null));
+          // Refetch the query
+          data?.refetch();
+        }}
+      />
     );
   }
 
-  if (hasError) {
-    return (
-      <View style={[T.p4]}>
-        <Button title="Back to Issues" onPress={onBack} variant="outline" />
-        <GitHubApiError message={errorMessage} />
-      </View>
-    );
-  }
-
-  if (!selectedIssue) {
-    return (
-      <View style={[T.p4]}>
-        <Button title="Back to Issues" onPress={onBack} variant="outline" />
-        <Text style={[T.textLg, T.textCenter, T.mT4]}>Issue not found</Text>
-      </View>
-    );
-  }
-
+  // Render the issue details and comments
   return (
-    <View style={[T.flex1, T.bgWhite]}>
-      {/* Header */}
-      <View style={[T.p4, T.borderB, T.borderGrayLight]}>
-        <Button title="Back to Issues" onPress={onBack} variant="outline" />
-        
-        <View style={[T.mT4]}>
-          <View style={[T.flexRow, T.itemsCenter, T.mB2]}>
-            <View style={[
-              T.pY1, 
-              T.pX2, 
-              T.roundedFull, 
-              selectedIssue.state === 'OPEN' ? T.bgSuccess : T.bgDanger
-            ]}>
-              <Text style={[T.textWhite, T.textXs, T.fontMedium]}>
-                {selectedIssue.state}
+    <View style={tw`flex-1 bg-gray-50`}>
+      {issue && (
+        <>
+          {/* Issue details */}
+          <ScrollView style={tw`p-4 bg-white mb-2`}>
+            {/* Issue title */}
+            <Text style={tw`text-xl font-bold mb-2`}>
+              #{issue.number} {issue.title}
+            </Text>
+
+            {/* Issue metadata */}
+            <View style={tw`flex-row items-center mb-2`}>
+              <Text style={tw`text-gray-600 mr-2`}>
+                By {issue.author.login}
+              </Text>
+              <Text style={tw`text-gray-600`}>
+                on {formatDate(issue.createdAt)}
               </Text>
             </View>
-            <Text style={[T.textSm, T.textGray, T.mL2]}>
-              #{selectedIssue.number}
-            </Text>
-          </View>
-          
-          <Text style={[T.text2Xl, T.fontBold, T.textDark]}>
-            {selectedIssue.title}
-          </Text>
-          
-          <Text style={[T.textSm, T.textGray, T.mT2]}>
-            Opened by {selectedIssue.author.login} on {formatDate(selectedIssue.createdAt)}
-          </Text>
-        </View>
-      </View>
-      
-      {/* Issue body */}
-      <ScrollView style={[T.flex1]}>
-        <View style={[T.p4, T.borderB, T.borderGrayLight]}>
-          <Text style={[T.textBase, T.textDark]}>
-            {selectedIssue.bodyText}
-          </Text>
-        </View>
-        
-        {/* Comments section */}
-        <View style={[T.p4]}>
-          <Text style={[T.textLg, T.fontBold, T.textDark, T.mB4]}>
-            Comments ({comments.totalCount})
-          </Text>
-          
-          {comments.loading && comments.data.length === 0 ? (
-            <ActivityIndicator size="small" color="#0366d6" />
-          ) : comments.data.length === 0 ? (
-            <Text style={[T.textBase, T.textGray, T.textCenter]}>
-              No comments on this issue
-            </Text>
-          ) : (
-            <>
-              {comments.data.map(comment => (
-                <View key={comment.id} style={[T.p4, T.borderB, T.borderGrayLight, T.mB4]}>
-                  <View style={[T.flexRow, T.itemsCenter, T.mB2]}>
-                    <Text style={[T.fontBold, T.textDark]}>
-                      {comment.author.login}
-                    </Text>
-                    <Text style={[T.textSm, T.textGray, T.mL2]}>
-                      {formatDate(comment.createdAt)}
+
+            {/* Issue state */}
+            <View
+              style={tw`${
+                issue.state === 'OPEN' ? 'bg-green-100' : 'bg-red-100'
+              } self-start px-2 py-1 rounded-md mb-4`}
+            >
+              <Text
+                style={tw`${
+                  issue.state === 'OPEN' ? 'text-green-800' : 'text-red-800'
+                } font-medium`}
+              >
+                {issue.state}
+              </Text>
+            </View>
+
+            {/* Issue body */}
+            <Text style={tw`text-gray-800 mb-4`}>{issue.bodyText}</Text>
+          </ScrollView>
+
+          {/* Comments section */}
+          <View style={tw`flex-1`}>
+            {/* Comments header */}
+            <View
+              style={tw`px-4 py-2 bg-gray-200 flex-row justify-between items-center`}
+            >
+              <Text style={tw`font-bold`}>
+                Comments ({issue.comments.totalCount})
+              </Text>
+            </View>
+
+            {/* Comments list */}
+            <FlatList
+              data={comments}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => <CommentItem comment={item} />}
+              // Infinite scroll
+              onEndReached={handleLoadMoreComments}
+              onEndReachedThreshold={0.5}
+              // Footer with loading indicator for pagination
+              ListFooterComponent={() =>
+                loadingMoreComments ? (
+                  <View style={tw`py-4 items-center`}>
+                    <ActivityIndicator size='small' color='#4299e1' />
+                  </View>
+                ) : null
+              }
+              // Empty state
+              ListEmptyComponent={() =>
+                !loading ? (
+                  <View style={tw`p-4 items-center justify-center`}>
+                    <Text style={tw`text-gray-500`}>
+                      No comments on this issue.
                     </Text>
                   </View>
-                  <Text style={[T.textBase, T.textDark]}>
-                    {comment.bodyText}
-                  </Text>
-                </View>
-              ))}
-              
-              {/* Load more comments button */}
-              {comments.pageInfo.hasNextPage && (
-                <View style={[T.mT4, T.itemsCenter]}>
-                  <Button
-                    title={comments.loading ? "Loading more..." : "Load More Comments"}
-                    onPress={handleLoadMoreComments}
-                    disabled={comments.loading}
-                    variant="outline"
-                  />
-                </View>
-              )}
-            </>
-          )}
-        </View>
-      </ScrollView>
+                ) : null
+              }
+            />
+          </View>
+        </>
+      )}
     </View>
   );
 };

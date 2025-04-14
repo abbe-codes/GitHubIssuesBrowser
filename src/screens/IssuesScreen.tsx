@@ -1,40 +1,210 @@
-import React from 'react';
-import { SafeAreaView, View, Text, ScrollView } from 'react-native';
-import { useAppSelector } from '../redux/hooks';
-import T from '../utils/tailwind';
-import SearchForm from '../components/SearchForm';
-import IssuesList from '../components/IssuesList';
-import { useGitHubApiLoading } from '../utils/githubApi';
+// src/screens/IssuesScreen.tsx
+import React, { useEffect, useState } from 'react';
+import { View, FlatList, Text, ActivityIndicator } from 'react-native';
+import { useQuery } from '@apollo/client';
+import { useDispatch, useSelector } from 'react-redux';
+import { StackNavigationProp } from '@react-navigation/stack';
+import { RootStackParamList } from '../navigation';
+import { SEARCH_ISSUES } from '../api/queries';
+import {
+  setIssues,
+  addIssues,
+  setLoading,
+  setError,
+} from '../store/issuesSlice';
+import { RootState } from '../store';
+import { Issue } from '../types';
+import SearchBar from '../components/SearchBar';
+import IssueItem from '../components/IssueItem';
+import LoadingView from '../components/LoadingView';
+import ErrorView from '../components/ErrorView';
+import tw from 'twrnc';
 
-interface IssuesScreenProps {
-  onSelectIssue: (issueNumber: number) => void;
-}
+// Props type definition
+type IssuesScreenProps = {
+  navigation: StackNavigationProp<RootStackParamList, 'Issues'>;
+};
 
-const IssuesScreen: React.FC<IssuesScreenProps> = ({ onSelectIssue }) => {
-  const isLoading = useGitHubApiLoading();
-  const { totalCount } = useAppSelector(state => state.issues);
+// IssuesScreen component for displaying the list of issues
+// This is the main screen of the app
+const IssuesScreen = ({ navigation }: IssuesScreenProps) => {
+  const dispatch = useDispatch();
+  const { issues, loading, error, pageInfo, searchParams } = useSelector(
+    (state: RootState) => state.issues
+  );
 
+  // Local state for pagination loading
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  // Build the search query string based on search parameters
+  const buildSearchQuery = () => {
+    let query = 'repo:facebook/react-native';
+
+    // Add state filter if selected
+    if (searchParams.state) {
+      query += ` state:${searchParams.state}`;
+    }
+
+    // Add search term with appropriate scope
+    if (searchParams.searchTerm) {
+      if (searchParams.searchIn === 'title') {
+        query += ` in:title ${searchParams.searchTerm}`;
+      } else if (searchParams.searchIn === 'body') {
+        query += ` in:body ${searchParams.searchTerm}`;
+      } else {
+        // Both title and body
+        query += ` ${searchParams.searchTerm}`;
+      }
+    }
+
+    return query;
+  };
+
+  // Execute the GraphQL query
+  const {
+    loading: queryLoading,
+    error: queryError,
+    data,
+    fetchMore,
+  } = useQuery(SEARCH_ISSUES, {
+    variables: {
+      query: buildSearchQuery(),
+      first: 10,
+      after: null,
+    },
+    notifyOnNetworkStatusChange: true,
+    // Skip initial query if search term is empty
+    skip: false,
+  });
+
+  // Update Redux state when query data changes
+  useEffect(() => {
+    if (queryLoading && !loadingMore) {
+      dispatch(setLoading(true));
+    } else if (!queryLoading) {
+      dispatch(setLoading(false));
+      setLoadingMore(false);
+
+      if (queryError) {
+        dispatch(setError(queryError.message));
+      } else if (data) {
+        // Map the GraphQL response to our Issue type
+        const fetchedIssues = data.search.edges.map(
+          (edge: any) => edge.node as Issue
+        );
+
+        dispatch(
+          setIssues({
+            issues: fetchedIssues,
+            pageInfo: data.search.pageInfo,
+          })
+        );
+      }
+    }
+  }, [queryLoading, queryError, data, dispatch, loadingMore]);
+
+  // Handle loading more issues (pagination)
+  const handleLoadMore = () => {
+    if (pageInfo?.hasNextPage && !loadingMore) {
+      setLoadingMore(true);
+
+      fetchMore({
+        variables: {
+          after: pageInfo.endCursor,
+        },
+      })
+        .then((result) => {
+          // Map the new issues
+          const newIssues = result.data.search.edges.map(
+            (edge: any) => edge.node as Issue
+          );
+
+          // Add the new issues to the existing list
+          dispatch(
+            addIssues({
+              issues: newIssues,
+              pageInfo: result.data.search.pageInfo,
+            })
+          );
+
+          setLoadingMore(false);
+        })
+        .catch((error) => {
+          setLoadingMore(false);
+          dispatch(setError(error.message));
+        });
+    }
+  };
+
+  // Navigate to issue detail screen
+  const handleIssuePress = (issueNumber: number) => {
+    navigation.navigate('IssueDetail', { issueNumber });
+  };
+
+  // Render loading state
+  if (loading && !loadingMore) {
+    return <LoadingView message='Loading issues...' />;
+  }
+
+  // Render error state
+  if (error && !loading) {
+    return (
+      <ErrorView
+        message={`Error loading issues: ${error}`}
+        onRetry={() => {
+          dispatch(setError(null));
+          // Refetch the query
+          data?.refetch();
+        }}
+      />
+    );
+  }
+
+  // Render the list of issues
   return (
-    <SafeAreaView style={[T.flex1, T.bgWhite]}>
-      <View style={[T.p4, T.borderB, T.borderGrayLight]}>
-        <Text style={[T.text2Xl, T.fontBold, T.textDark]}>GitHub Issues Browser</Text>
-        <Text style={[T.textBase, T.textGray]}>React Native Repository</Text>
-      </View>
-      
-      <ScrollView style={[T.flex1]}>
-        <View style={[T.p4]}>
-          <SearchForm />
-          
-          {isLoading && totalCount === 0 ? (
-            <View style={[T.p4, T.itemsCenter, T.justifyCenter]}>
-              <Text style={[T.textLg, T.textGray]}>Loading issues...</Text>
+    <View style={tw`flex-1 bg-gray-50`}>
+      {/* Search bar */}
+      <SearchBar />
+
+      {/* Issues list */}
+      <FlatList
+        data={issues}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => (
+          <IssueItem
+            issue={item}
+            onPress={() => handleIssuePress(item.number)}
+          />
+        )}
+        // Pull to refresh
+        refreshing={loading && !loadingMore}
+        onRefresh={() => {
+          dispatch(setLoading(true));
+          data?.refetch();
+        }}
+        // Infinite scroll
+        onEndReached={handleLoadMore}
+        onEndReachedThreshold={0.5}
+        // Footer with loading indicator for pagination
+        ListFooterComponent={() =>
+          loadingMore ? (
+            <View style={tw`py-4 items-center`}>
+              <ActivityIndicator size='small' color='#4299e1' />
             </View>
-          ) : (
-            <IssuesList onSelectIssue={onSelectIssue} />
-          )}
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+          ) : null
+        }
+        // Empty state
+        ListEmptyComponent={() =>
+          !loading ? (
+            <View style={tw`p-4 items-center justify-center`}>
+              <Text style={tw`text-gray-500`}>
+                No issues found. Try adjusting your search.
+              </Text>
+            </View>
+          ) : null
+        }
+      />
+    </View>
   );
 };
 

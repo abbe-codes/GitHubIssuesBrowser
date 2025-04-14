@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text } from 'react-native';
-import { useAppSelector, useAppDispatch } from '../redux/hooks';
-import { searchIssues } from '../redux/thunks';
+import { useAppSelector, useAppDispatch } from '../store/hooks';
+import { searchIssues } from '../store/thunks';
 import T from '../utils/tailwind';
 
 // This is a utility hook to make the Apollo client available to our thunks
