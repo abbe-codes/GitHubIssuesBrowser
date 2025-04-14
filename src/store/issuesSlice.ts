@@ -53,8 +53,10 @@ const issuesSlice = createSlice({
       state,
       action: PayloadAction<{ issues: Issue[]; pageInfo: PageInfo }>
     ) => {
+      console.log('Adding issues to state:', action.payload.issues.length);
       state.issues = [...state.issues, ...action.payload.issues];
       state.pageInfo = action.payload.pageInfo;
+      console.log('New state issues count:', state.issues.length);
     },
 
     // Update search parameters

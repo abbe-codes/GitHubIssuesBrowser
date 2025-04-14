@@ -105,34 +105,62 @@ const IssuesScreen = ({ navigation }: IssuesScreenProps) => {
 
   // Handle loading more issues (pagination)
   const handleLoadMore = () => {
+    // Add console logs to debug
+    console.log('Load more triggered');
+    console.log('pageInfo:', pageInfo);
+    console.log('loadingMore:', loadingMore);
+
     if (pageInfo?.hasNextPage && !loadingMore) {
+      console.log('Starting to load more with cursor:', pageInfo.endCursor);
       setLoadingMore(true);
 
       fetchMore({
         variables: {
+          query: buildSearchQuery(),
+          first: 10,
           after: pageInfo.endCursor,
         },
       })
         .then((result) => {
-          // Map the new issues
-          const newIssues = result.data.search.edges.map(
-            (edge: any) => edge.node as Issue
-          );
+          console.log('Fetch more result:', result);
 
-          // Add the new issues to the existing list
-          dispatch(
-            addIssues({
-              issues: newIssues,
-              pageInfo: result.data.search.pageInfo,
-            })
-          );
+          // Check if we have valid data
+          if (result.data && result.data.search && result.data.search.edges) {
+            // Map the new issues
+            const newIssues = result.data.search.edges.map(
+              (edge: any) => edge.node as Issue
+            );
+
+            console.log('New issues count:', newIssues.length);
+
+            // Add the new issues to the existing list
+            dispatch(
+              addIssues({
+                issues: newIssues,
+                pageInfo: result.data.search.pageInfo,
+              })
+            );
+          } else {
+            console.log('Invalid data structure in fetchMore result');
+            dispatch(
+              setError('Failed to load more issues: Invalid data structure')
+            );
+          }
 
           setLoadingMore(false);
         })
         .catch((error) => {
+          console.error('Error loading more:', error);
           setLoadingMore(false);
           dispatch(setError(error.message));
         });
+    } else {
+      console.log(
+        'Not loading more: hasNextPage =',
+        pageInfo?.hasNextPage,
+        'loadingMore =',
+        loadingMore
+      );
     }
   };
 
@@ -190,6 +218,7 @@ const IssuesScreen = ({ navigation }: IssuesScreenProps) => {
           loadingMore ? (
             <View style={tw`py-4 items-center`}>
               <ActivityIndicator size='small' color='#4299e1' />
+              <Text style={tw`mt-2 text-gray-500`}>Loading more issues...</Text>
             </View>
           ) : null
         }
