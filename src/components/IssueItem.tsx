@@ -11,7 +11,6 @@ interface IssueItemProps {
 }
 
 // IssueItem component for displaying a single issue in the list
-// This renders each issue with its title, author, and status
 const IssueItem = ({ issue, onPress }: IssueItemProps) => {
   // Format date to be more readable
   const formatDate = (dateString: string) => {
@@ -28,27 +27,37 @@ const IssueItem = ({ issue, onPress }: IssueItemProps) => {
         {/* Issue title and number */}
         <View style={tw`flex-1 mr-2`}>
           <Text style={tw`font-bold text-lg`}>
-            #{issue.number} {issue.title}
+            #{issue.number} {issue.title || 'Untitled Issue'}
           </Text>
 
           {/* Issue metadata */}
           <View style={tw`flex-row items-center mt-1`}>
             {/* Author avatar */}
-            <Image
-              source={{ uri: issue.author.avatarUrl }}
-              style={tw`w-5 h-5 rounded-full mr-2`}
-            />
+            {issue.author ? (
+              <Image
+                source={{ uri: issue.author.avatarUrl }}
+                style={tw`w-5 h-5 rounded-full mr-2`}
+              />
+            ) : (
+              <View style={tw`w-5 h-5 bg-gray-300 rounded-full mr-2`} />
+            )}
 
             {/* Author name */}
-            <Text style={tw`text-gray-600 mr-2`}>{issue.author.login}</Text>
+            <Text style={tw`text-gray-600 mr-2`}>
+              {issue.author ? issue.author.login : 'Unknown user'}
+            </Text>
 
             {/* Creation date */}
-            <Text style={tw`text-gray-600`}>{formatDate(issue.createdAt)}</Text>
+            <Text style={tw`text-gray-600`}>
+              {issue.createdAt ? formatDate(issue.createdAt) : 'Unknown date'}
+            </Text>
           </View>
 
           {/* Comment count */}
           <Text style={tw`text-gray-500 mt-1`}>
-            {issue.comments.totalCount} comments
+            {issue.comments
+              ? `${issue.comments.totalCount} comments`
+              : '0 comments'}
           </Text>
         </View>
 
@@ -63,7 +72,7 @@ const IssueItem = ({ issue, onPress }: IssueItemProps) => {
               issue.state === 'OPEN' ? 'text-green-800' : 'text-red-800'
             } font-medium`}
           >
-            {issue.state}
+            {issue.state || 'UNKNOWN'}
           </Text>
         </View>
       </View>

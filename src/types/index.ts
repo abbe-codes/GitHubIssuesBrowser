@@ -8,7 +8,8 @@ export interface Issue {
   bodyText: string;
   state: 'OPEN' | 'CLOSED';
   createdAt: string;
-  author: {
+  author?: {
+    // Make author optional with the ? operator
     login: string;
     avatarUrl: string;
   };
